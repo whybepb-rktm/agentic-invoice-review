@@ -1,0 +1,14 @@
+ACME OFFICE SUPPLIES
+Invoice #: INV-2041
+Date: 2026-05-28
+Bill To: Rocketium Pvt Ltd
+-----------------------------------------
+Qty  Description              Unit     Amount
+2    Ergonomic chair          120.00   240.00
+5    Notebook (pack of 5)       8.00    40.00
+1    Standing desk mat         35.00    35.00
+-----------------------------------------
+Subtotal: 315.00
+Tax (18%): 56.70
+TOTAL DUE: USD 371.70
+Payment terms: Net 30

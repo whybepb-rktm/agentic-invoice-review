@@ -1,0 +1,61 @@
+{
+  "_comment": "Verified output for SAMPLE_INDEX = 0 (ACME, clean). 'validate_node_output' is what the deterministic node emits; 'final_ledger_row' is the row written to the audit ledger at the end of the AUTO_APPROVED branch.",
+  "validate_node_output": {
+    "decision": "AUTO_APPROVED",
+    "routeIndex": 0,
+    "reasons": [
+      "Passed all checks and below approval threshold (5000)"
+    ],
+    "validation": {
+      "mathOk": true,
+      "lineItemsMatchSubtotal": true,
+      "totalMatches": true,
+      "computedLineSum": 315,
+      "subtotal": 315,
+      "tax": 56.7,
+      "computedTotal": 371.7,
+      "statedTotal": 371.7,
+      "currencyOk": true,
+      "vendorKnown": true,
+      "lowConfidence": false,
+      "requiredMissing": [],
+      "parseError": null
+    },
+    "invoice": {
+      "vendor_name": "ACME OFFICE SUPPLIES",
+      "invoice_number": "INV-2041",
+      "invoice_date": "2026-05-28",
+      "currency": "USD",
+      "line_items": [
+        { "description": "Ergonomic chair", "quantity": 2, "unit_price": 120, "amount": 240 },
+        { "description": "Notebook (pack of 5)", "quantity": 5, "unit_price": 8, "amount": 40 },
+        { "description": "Standing desk mat", "quantity": 1, "unit_price": 35, "amount": 35 }
+      ],
+      "subtotal": 315,
+      "tax": 56.7,
+      "stated_total": 371.7,
+      "extraction_confidence": 0.97
+    },
+    "meta": {
+      "source": "manual-demo",
+      "sampleIndex": 0,
+      "receivedAt": "2026-06-04T00:00:00.000Z",
+      "processedAt": "2026-06-04T00:00:00.000Z"
+    }
+  },
+  "final_ledger_row": {
+    "processed_at": "2026-06-04T00:00:00.000Z",
+    "status": "AUTO_APPROVED",
+    "decision": "AUTO_APPROVED",
+    "vendor": "ACME OFFICE SUPPLIES",
+    "invoice_number": "INV-2041",
+    "invoice_date": "2026-05-28",
+    "currency": "USD",
+    "amount": 371.7,
+    "vendor_known": true,
+    "math_ok": true,
+    "reasons": "Passed all checks and below approval threshold (5000)",
+    "approver": "auto",
+    "ai_note": ""
+  }
+}

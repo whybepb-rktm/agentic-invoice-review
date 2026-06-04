@@ -1,0 +1,12 @@
+DELL TECHNOLOGIES
+Invoice Number INV-99812
+Invoice Date: 2026-05-30
+Customer: Rocketium Pvt Ltd
+Item                       Qty   Rate       Line Total
+Latitude 7440 Laptop         6   1450.00    8700.00
+USB-C Dock                   6    180.00    1080.00
+3yr ProSupport               6    150.00     900.00
+Subtotal                                   10680.00
+Tax (0%)                                        0.00
+Amount Payable: USD 10680.00
+Terms: Net 45

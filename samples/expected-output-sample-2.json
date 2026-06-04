@@ -1,0 +1,61 @@
+{
+  "_comment": "Verified output for SAMPLE_INDEX = 2 (BRIGHT PRINT, math error). The LLM faithfully extracted stated_total = 970, but the deterministic node re-computed 625 + 45 = 670, caught the mismatch, and routed to REJECT_TO_MANUAL. This is the headline 'AI extracts / code verifies' moment.",
+  "validate_node_output": {
+    "decision": "REJECT_TO_MANUAL",
+    "routeIndex": 2,
+    "reasons": [
+      "Math check failed: line items=625, subtotal=625, computed total=670, stated total=970"
+    ],
+    "validation": {
+      "mathOk": false,
+      "lineItemsMatchSubtotal": true,
+      "totalMatches": false,
+      "computedLineSum": 625,
+      "subtotal": 625,
+      "tax": 45,
+      "computedTotal": 670,
+      "statedTotal": 970,
+      "currencyOk": true,
+      "vendorKnown": true,
+      "lowConfidence": false,
+      "requiredMissing": [],
+      "parseError": null
+    },
+    "invoice": {
+      "vendor_name": "BRIGHT PRINT CO",
+      "invoice_number": "BP-5567",
+      "invoice_date": "2026-05-22",
+      "currency": "USD",
+      "line_items": [
+        { "description": "Brochure printing (A4)", "quantity": 1000, "unit_price": 0.45, "amount": 450 },
+        { "description": "Lamination", "quantity": 1000, "unit_price": 0.1, "amount": 100 },
+        { "description": "Design setup fee", "quantity": 1, "unit_price": 75, "amount": 75 }
+      ],
+      "subtotal": 625,
+      "tax": 45,
+      "stated_total": 970,
+      "extraction_confidence": 0.95
+    },
+    "meta": {
+      "source": "manual-demo",
+      "sampleIndex": 2,
+      "receivedAt": "2026-06-04T00:00:00.000Z",
+      "processedAt": "2026-06-04T00:00:00.000Z"
+    }
+  },
+  "final_ledger_row": {
+    "processed_at": "2026-06-04T00:00:00.000Z",
+    "status": "REJECTED_NEEDS_FIX",
+    "decision": "REJECT_TO_MANUAL",
+    "vendor": "BRIGHT PRINT CO",
+    "invoice_number": "BP-5567",
+    "invoice_date": "2026-05-22",
+    "currency": "USD",
+    "amount": 970,
+    "vendor_known": true,
+    "math_ok": false,
+    "reasons": "Math check failed: line items=625, subtotal=625, computed total=670, stated total=970",
+    "approver": "n/a",
+    "ai_note": "Auto-rejected by deterministic checks. Fix and resubmit. Issues: Math check failed: line items=625, subtotal=625, computed total=670, stated total=970"
+  }
+}

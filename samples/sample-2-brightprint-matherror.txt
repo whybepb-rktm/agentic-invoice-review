@@ -1,0 +1,10 @@
+BRIGHT PRINT CO
+INV: BP-5567   Dated 2026-05-22
+To: Rocketium Pvt Ltd
+Description               Qty    Price   Total
+Brochure printing (A4)    1000    0.45   450.00
+Lamination                1000    0.10   100.00
+Design setup fee             1   75.00    75.00
+Subtotal:  625.00
+Tax:        45.00
+GRAND TOTAL: USD 970.00

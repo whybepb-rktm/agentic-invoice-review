@@ -1,0 +1,746 @@
+{
+  "name": "Invoice Review & Approval — Agentic Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "▶ Start (Manual Trigger)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -360,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"config\": {\n    \"approvalThresholdUSD\": 5000,\n    \"confidenceFloor\": 0.6,\n    \"totalTolerance\": 0.05,\n    \"allowedCurrencies\": [\n      \"USD\",\n      \"INR\",\n      \"EUR\"\n    ],\n    \"approvedVendors\": [\n      \"ACME OFFICE SUPPLIES\",\n      \"DELL TECHNOLOGIES\",\n      \"BRIGHT PRINT CO\",\n      \"STAPLES\",\n      \"AWS\",\n      \"GOOGLE CLOUD\"\n    ]\n  }\n}",
+        "options": {}
+      },
+      "id": "config",
+      "name": "⚙️ Config (thresholds & allowlists)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -140,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// INPUT (demo).  👉 Change SAMPLE_INDEX to demo a different branch:\n//   0 = clean, low value, known vendor   -> AUTO_APPROVED\n//   1 = high value (>= threshold)        -> NEEDS_APPROVAL (human-in-the-loop)\n//   2 = totals don't add up              -> REJECT_TO_MANUAL (deterministic catch)\n//   3 = unknown / unlisted vendor        -> NEEDS_APPROVAL\n// ============================================================\nconst SAMPLE_INDEX = 0;\n\nconst samples = [\n  // 0 — clean, $371.70, ACME is on the allowlist  => AUTO_APPROVED\n  [\"ACME OFFICE SUPPLIES\",\n   \"Invoice #: INV-2041\",\n   \"Date: 2026-05-28\",\n   \"Bill To: Rocketium Pvt Ltd\",\n   \"-----------------------------------------\",\n   \"Qty  Description              Unit     Amount\",\n   \"2    Ergonomic chair          120.00   240.00\",\n   \"5    Notebook (pack of 5)       8.00    40.00\",\n   \"1    Standing desk mat         35.00    35.00\",\n   \"-----------------------------------------\",\n   \"Subtotal: 315.00\",\n   \"Tax (18%): 56.70\",\n   \"TOTAL DUE: USD 371.70\",\n   \"Payment terms: Net 30\"].join(\"\\n\"),\n\n  // 1 — $10,680 (>= 5000 threshold), DELL is on the allowlist => NEEDS_APPROVAL\n  [\"DELL TECHNOLOGIES\",\n   \"Invoice Number INV-99812\",\n   \"Invoice Date: 2026-05-30\",\n   \"Customer: Rocketium Pvt Ltd\",\n   \"Item                       Qty   Rate       Line Total\",\n   \"Latitude 7440 Laptop         6   1450.00    8700.00\",\n   \"USB-C Dock                   6    180.00    1080.00\",\n   \"3yr ProSupport               6    150.00     900.00\",\n   \"Subtotal                                   10680.00\",\n   \"Tax (0%)                                        0.00\",\n   \"Amount Payable: USD 10680.00\",\n   \"Terms: Net 45\"].join(\"\\n\"),\n\n  // 2 — line items + tax = 670 but stated total says 970 => REJECT_TO_MANUAL\n  [\"BRIGHT PRINT CO\",\n   \"INV: BP-5567   Dated 2026-05-22\",\n   \"To: Rocketium Pvt Ltd\",\n   \"Description               Qty    Price   Total\",\n   \"Brochure printing (A4)    1000    0.45   450.00\",\n   \"Lamination                1000    0.10   100.00\",\n   \"Design setup fee             1   75.00    75.00\",\n   \"Subtotal:  625.00\",\n   \"Tax:        45.00\",\n   \"GRAND TOTAL: USD 970.00\"].join(\"\\n\"),\n\n  // 3 — maths fine, $3,079.80 (< threshold) but NIMBUS not on allowlist => NEEDS_APPROVAL\n  [\"NIMBUS CLOUD SERVICES\",\n   \"Invoice #: NB-3310\",\n   \"Date: 2026-06-01\",\n   \"Bill To: Rocketium Pvt Ltd\",\n   \"Service                         Amount\",\n   \"Managed Kubernetes (May)        2200.00\",\n   \"Egress + storage overage         410.00\",\n   \"Subtotal                        2610.00\",\n   \"Tax (18%)                        469.80\",\n   \"TOTAL: USD 3079.80\",\n   \"Terms: Net 15\"].join(\"\\n\")\n];\n\nconst idx = Math.min(Math.max(SAMPLE_INDEX, 0), samples.length - 1);\nconst invoiceText = samples[idx];\n\n// Build the extraction prompt here (plain JS string -> no {{ }} clashes).\nconst extractionPrompt = [\n  \"You are an invoice DATA-EXTRACTION agent. Read the raw invoice text and return\",\n  \"ONLY a valid minified JSON object (no markdown fences, no commentary) with EXACTLY these keys:\",\n  '{\"vendor_name\":\"string\",\"invoice_number\":\"string\",\"invoice_date\":\"YYYY-MM-DD or empty\",\"currency\":\"3-letter ISO e.g. USD\",\"line_items\":[{\"description\":\"string\",\"quantity\":0,\"unit_price\":0,\"amount\":0}],\"subtotal\":0,\"tax\":0,\"stated_total\":0,\"extraction_confidence\":0}',\n  \"\",\n  \"RULES:\",\n  \"- Copy every number EXACTLY as printed. Do NOT recompute, correct, or 'fix' any totals.\",\n  \"  If the invoice maths looks wrong, still report stated_total exactly as printed.\",\n  \"  (A separate deterministic step verifies the arithmetic.)\",\n  \"- Missing field => \\\"\\\" for strings, 0 for numbers, [] for line_items.\",\n  \"- extraction_confidence (0..1) = how sure you are this text was a parseable invoice.\",\n  \"\",\n  \"RAW INVOICE TEXT:\",\n  invoiceText\n].join(\"\\n\");\n\nreturn [{\n  json: {\n    invoiceText,\n    extractionPrompt,\n    source: \"manual-demo\",\n    sampleIndex: idx,\n    receivedAt: \"2026-06-04T00:00:00.000Z\"   // fixed for a reproducible demo\n  }\n}];"
+      },
+      "id": "sample",
+      "name": "📄 Sample Invoice (OCR text)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.extractionPrompt }}",
+        "batching": {}
+      },
+      "id": "extract",
+      "name": "🤖 AI #1: Extract Invoice Fields",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        320,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "ex-model",
+      "name": "OpenAI Model — Extract",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        320,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// DETERMINISTIC CORE — there is NO AI in this node.\n//   1) Parse the AI's JSON (with fallback if it isn't valid JSON)\n//   2) RE-COMPUTE every total ourselves (never trust an LLM for arithmetic)\n//   3) Rule checks: required fields, currency allowlist, vendor allowlist\n//   4) Decide the route: AUTO_APPROVED | NEEDS_APPROVAL | REJECT_TO_MANUAL\n// ============================================================\nconst cfg = $('⚙️ Config (thresholds & allowlists)').first().json.config;\n\n// LLM output field name varies by node/version — accept the common ones.\nconst raw =\n  $json.text ?? $json.output ?? $json.response ??\n  (typeof $json.message === 'object' ? $json.message.content : $json.message) ??\n  $json.content ?? '';\n\n// ---- Fallback handling: AI did not return parseable JSON ----\nfunction tryParse(s) {\n  if (s && typeof s === 'object') return s;\n  let t = String(s).trim();\n  t = t.replace(/^\\x60{3}(json)?/i, '').replace(/\\x60{3}$/, '').trim(); // strip markdown code fences\n  const a = t.indexOf('{');\n  const b = t.lastIndexOf('}');\n  if (a !== -1 && b !== -1) t = t.slice(a, b + 1);\n  return JSON.parse(t);\n}\n\nlet inv, parseError = null;\ntry {\n  inv = tryParse(raw);\n} catch (e) {\n  parseError = 'AI_OUTPUT_UNPARSEABLE: ' + e.message;\n  inv = { vendor_name:'', invoice_number:'', invoice_date:'', currency:'',\n          line_items:[], subtotal:0, tax:0, stated_total:0, extraction_confidence:0 };\n}\n\nconst num = (n) => (Number(n) || 0);\nconst round2 = (n) => Math.round(num(n) * 100) / 100;\n\n// ---- Re-compute the maths deterministically ----\nconst lineItems = Array.isArray(inv.line_items) ? inv.line_items : [];\nconst computedLineSum = round2(lineItems.reduce((s, li) => s + num(li.amount), 0));\nconst subtotal        = round2(inv.subtotal);\nconst tax             = round2(inv.tax);\nconst computedTotal   = round2(subtotal + tax);\nconst statedTotal     = round2(inv.stated_total);\nconst tol             = num(cfg.totalTolerance) || 0.05;\n\nconst lineItemsMatchSubtotal = Math.abs(computedLineSum - subtotal) <= tol;\nconst totalMatches           = Math.abs(computedTotal - statedTotal) <= tol;\nconst mathOk                 = lineItemsMatchSubtotal && totalMatches;\n\n// ---- Rule-based checks ----\nconst requiredMissing = [];\nif (!inv.vendor_name)    requiredMissing.push('vendor_name');\nif (!inv.invoice_number) requiredMissing.push('invoice_number');\nif (!statedTotal)        requiredMissing.push('stated_total');\n\nconst allowedCur = (cfg.allowedCurrencies || []).map(c => String(c).toUpperCase());\nconst currencyOk = allowedCur.includes(String(inv.currency || '').toUpperCase());\n\nconst approved   = (cfg.approvedVendors || []).map(v => String(v).toUpperCase());\nconst vendorKnown = approved.includes(String(inv.vendor_name || '').toUpperCase());\n\nconst confFloor    = num(cfg.confidenceFloor) || 0.6;\nconst lowConfidence = num(inv.extraction_confidence) < confFloor;\n\nconst threshold = num(cfg.approvalThresholdUSD) || 5000;\n\n// ---- Decision logic (deterministic thresholds + routing) ----\nconst reasons = [];\nlet decision, routeIndex;\n\nif (parseError || requiredMissing.length || !mathOk || !currencyOk || lowConfidence) {\n  decision = 'REJECT_TO_MANUAL'; routeIndex = 2;\n  if (parseError)            reasons.push(parseError);\n  if (requiredMissing.length) reasons.push('Missing required fields: ' + requiredMissing.join(', '));\n  if (!mathOk)               reasons.push('Math check failed: line items=' + computedLineSum +\n                                          ', subtotal=' + subtotal + ', computed total=' + computedTotal +\n                                          ', stated total=' + statedTotal);\n  if (!currencyOk)           reasons.push('Currency not allowed: ' + (inv.currency || '(none)'));\n  if (lowConfidence)         reasons.push('Low extraction confidence: ' + num(inv.extraction_confidence));\n} else if (!vendorKnown || statedTotal >= threshold) {\n  decision = 'NEEDS_APPROVAL'; routeIndex = 1;\n  if (!vendorKnown)            reasons.push('Vendor not on approved list: ' + inv.vendor_name);\n  if (statedTotal >= threshold) reasons.push('Amount ' + statedTotal + ' >= approval threshold ' + threshold);\n} else {\n  decision = 'AUTO_APPROVED'; routeIndex = 0;\n  reasons.push('Passed all checks and below approval threshold (' + threshold + ')');\n}\n\nreturn [{\n  json: {\n    decision, routeIndex, reasons,\n    validation: {\n      mathOk, lineItemsMatchSubtotal, totalMatches,\n      computedLineSum, subtotal, tax, computedTotal, statedTotal,\n      currencyOk, vendorKnown, lowConfidence, requiredMissing, parseError\n    },\n    invoice: inv,\n    meta: {\n      source:      $('📄 Sample Invoice (OCR text)').first().json.source,\n      sampleIndex: $('📄 Sample Invoice (OCR text)').first().json.sampleIndex,\n      receivedAt:  $('📄 Sample Invoice (OCR text)').first().json.receivedAt,\n      processedAt: '2026-06-04T00:00:00.000Z'\n    }\n  }\n}];"
+      },
+      "id": "validate",
+      "name": "🧮 Validate & Decide (deterministic)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r0-c",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "AUTO_APPROVED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "AUTO_APPROVED"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r1-c",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "NEEDS_APPROVAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "NEEDS_APPROVAL"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "r2-c",
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "REJECT_TO_MANUAL",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "REJECT_TO_MANUAL"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route",
+      "name": "🔀 Route by Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "auto-row-a0",
+              "name": "processed_at",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.meta.processedAt }}",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a1",
+              "name": "decision",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.decision }}",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a2",
+              "name": "vendor",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.vendor_name }}",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a3",
+              "name": "invoice_number",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.invoice_number }}",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a4",
+              "name": "invoice_date",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.invoice_date }}",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a5",
+              "name": "currency",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.currency }}",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a6",
+              "name": "amount",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.validation.statedTotal }}",
+              "type": "number"
+            },
+            {
+              "id": "auto-row-a7",
+              "name": "vendor_known",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.validation.vendorKnown }}",
+              "type": "boolean"
+            },
+            {
+              "id": "auto-row-a8",
+              "name": "math_ok",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.validation.mathOk }}",
+              "type": "boolean"
+            },
+            {
+              "id": "auto-row-a9",
+              "name": "reasons",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.reasons.join(' | ') }}",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a10",
+              "name": "status",
+              "value": "AUTO_APPROVED",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a11",
+              "name": "approver",
+              "value": "auto",
+              "type": "string"
+            },
+            {
+              "id": "auto-row-a12",
+              "name": "ai_note",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "auto-row",
+      "name": "🟢 Ledger Row: Auto-Approved",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1080,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior accounts-payable reviewer. An invoice was routed for HUMAN APPROVAL.\nWrite a concise risk summary for the approver: max 4 short bullet points, reference the actual numbers.\nDo NOT approve or reject — only advise.\n\nVendor: {{ $json.invoice.vendor_name }}\nInvoice #: {{ $json.invoice.invoice_number }}\nCurrency: {{ $json.invoice.currency }}\nStated total: {{ $json.validation.statedTotal }}\nVendor on approved list: {{ $json.validation.vendorKnown }}\nWhy it was flagged: {{ $json.reasons.join(\"; \") }}\nLine items: {{ JSON.stringify($json.invoice.line_items) }}",
+        "batching": {}
+      },
+      "id": "review",
+      "name": "🤖 AI #2: Risk Review (for approver)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        1080,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "rv-model",
+      "name": "OpenAI Model — Review",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1080,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendAndWait",
+        "sendTo": "approver@example.com",
+        "subject": "=Approval needed: {{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.vendor_name }} — {{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.currency }} {{ $('🧮 Validate & Decide (deterministic)').first().json.validation.statedTotal }}",
+        "message": "=This invoice was flagged for human approval.\n\nReasons: {{ $('🧮 Validate & Decide (deterministic)').first().json.reasons.join('; ') }}\n\nAI risk summary:\n{{ $json.text }}",
+        "responseType": "approval",
+        "options": {}
+      },
+      "id": "approval",
+      "name": "🙋 Human Approval (Email)  [disabled]",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1320,
+        380
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// If the \"Human Approval (Email)\" node is ENABLED, its output carries the\n// approver's choice. When it is DISABLED (demo default), data passes straight\n// through with no approval field -> we record the row as PENDING.\nconst v = $('🧮 Validate & Decide (deterministic)').first().json;\n\n// The send-&-wait approval output shape varies by n8n version; check the\n// common spots. (Node is disabled by default -> none present -> PENDING.)\nconst d = ($json && typeof $json === 'object') ? $json : {};\nlet approved;\nif (d.approved === true  || (d.data && d.data.approved === true))  approved = true;\nelse if (d.approved === false || (d.data && d.data.approved === false)) approved = false;\nelse approved = undefined;\n\nlet status, approver;\nif (approved === true)       { status = 'APPROVED_BY_HUMAN'; approver = 'human-reviewer'; }\nelse if (approved === false) { status = 'REJECTED_BY_HUMAN'; approver = 'human-reviewer'; }\nelse                         { status = 'PENDING_HUMAN_APPROVAL'; approver = 'unassigned'; }\n\nreturn [{\n  json: {\n    processed_at:   v.meta.processedAt,\n    status,\n    decision:       v.decision,\n    vendor:         v.invoice.vendor_name,\n    invoice_number: v.invoice.invoice_number,\n    invoice_date:   v.invoice.invoice_date,\n    currency:       v.invoice.currency,\n    amount:         v.validation.statedTotal,\n    vendor_known:   v.validation.vendorKnown,\n    math_ok:        v.validation.mathOk,\n    reasons:        v.reasons.join(' | '),\n    approver,\n    ai_note:        $('🤖 AI #2: Risk Review (for approver)').first().json.text\n                      ?? $('🤖 AI #2: Risk Review (for approver)').first().json.output ?? ''\n  }\n}];"
+      },
+      "id": "resolve",
+      "name": "🟡 Resolve Approval + Build Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "reject-row-a0",
+              "name": "processed_at",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.meta.processedAt }}",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a1",
+              "name": "decision",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.decision }}",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a2",
+              "name": "vendor",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.vendor_name }}",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a3",
+              "name": "invoice_number",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.invoice_number }}",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a4",
+              "name": "invoice_date",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.invoice_date }}",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a5",
+              "name": "currency",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.invoice.currency }}",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a6",
+              "name": "amount",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.validation.statedTotal }}",
+              "type": "number"
+            },
+            {
+              "id": "reject-row-a7",
+              "name": "vendor_known",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.validation.vendorKnown }}",
+              "type": "boolean"
+            },
+            {
+              "id": "reject-row-a8",
+              "name": "math_ok",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.validation.mathOk }}",
+              "type": "boolean"
+            },
+            {
+              "id": "reject-row-a9",
+              "name": "reasons",
+              "value": "={{ $('🧮 Validate & Decide (deterministic)').first().json.reasons.join(' | ') }}",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a10",
+              "name": "status",
+              "value": "REJECTED_NEEDS_FIX",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a11",
+              "name": "approver",
+              "value": "n/a",
+              "type": "string"
+            },
+            {
+              "id": "reject-row-a12",
+              "name": "ai_note",
+              "value": "=Auto-rejected by deterministic checks. Fix and resubmit. Issues: {{ $('🧮 Validate & Decide (deterministic)').first().json.reasons.join(' | ') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "reject-row",
+      "name": "🔴 Ledger Row: Rejected",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        800,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "id": "sheets",
+      "name": "🔌 Append to Audit Ledger (Sheets)  [disabled]",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1800,
+        360
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {},
+      "id": "final",
+      "name": "✅ Final Output (Audit Record)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2040,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "width": 320,
+        "height": 560,
+        "color": 5,
+        "content": "## 🧾 Invoice Review & Approval\n### Agentic n8n workflow\n\n**AI extracts → code validates → router decides → human approves the risky ones.**\n\n**▶ To run:** open `📄 Sample Invoice`, set `SAMPLE_INDEX` (0–3), then click **Test workflow**.\n\n**Needs only an OpenAI credential** on the two `OpenAI Model` nodes. The Gmail + Google Sheets nodes are **disabled** (they pass data through) — enable them + add credentials for live email approval & ledger logging."
+      },
+      "id": "Sticky Note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -700,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "width": 220,
+        "height": 90,
+        "color": 4,
+        "content": "### 🤖 AI #1 · Extraction\nMessy invoice text → structured JSON. The LLM is told **not** to do arithmetic."
+      },
+      "id": "Sticky Note1",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        300,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "width": 480,
+        "height": 90,
+        "color": 7,
+        "content": "### 🧮 Deterministic core (NO AI)\nRe-computes every total, checks currency / vendor allowlist / threshold, and **decides the route**."
+      },
+      "id": "Sticky Note2",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        540,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "width": 240,
+        "height": 90,
+        "color": 4,
+        "content": "### 🤖 AI #2 · Risk review\nSummarises the risk for the human approver. Skipped for auto-approved & rejected items."
+      },
+      "id": "Sticky Note3",
+      "name": "Sticky Note3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1060,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "width": 760,
+        "height": 90,
+        "color": 3,
+        "content": "### 🔌 Integrations + Human-in-the-loop (disabled by default)\nGmail send-&-wait = human approval. Google Sheets = audit ledger. Enable + add credentials for live use."
+      },
+      "id": "Sticky Note4",
+      "name": "Sticky Note4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        250
+      ]
+    }
+  ],
+  "connections": {
+    "▶ Start (Manual Trigger)": {
+      "main": [
+        [
+          {
+            "node": "⚙️ Config (thresholds & allowlists)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚙️ Config (thresholds & allowlists)": {
+      "main": [
+        [
+          {
+            "node": "📄 Sample Invoice (OCR text)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📄 Sample Invoice (OCR text)": {
+      "main": [
+        [
+          {
+            "node": "🤖 AI #1: Extract Invoice Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 AI #1: Extract Invoice Fields": {
+      "main": [
+        [
+          {
+            "node": "🧮 Validate & Decide (deterministic)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧮 Validate & Decide (deterministic)": {
+      "main": [
+        [
+          {
+            "node": "🔀 Route by Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Route by Decision": {
+      "main": [
+        [
+          {
+            "node": "🟢 Ledger Row: Auto-Approved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🤖 AI #2: Risk Review (for approver)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "🔴 Ledger Row: Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🟢 Ledger Row: Auto-Approved": {
+      "main": [
+        [
+          {
+            "node": "🔌 Append to Audit Ledger (Sheets)  [disabled]",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🤖 AI #2: Risk Review (for approver)": {
+      "main": [
+        [
+          {
+            "node": "🙋 Human Approval (Email)  [disabled]",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🙋 Human Approval (Email)  [disabled]": {
+      "main": [
+        [
+          {
+            "node": "🟡 Resolve Approval + Build Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🟡 Resolve Approval + Build Row": {
+      "main": [
+        [
+          {
+            "node": "🔌 Append to Audit Ledger (Sheets)  [disabled]",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔴 Ledger Row: Rejected": {
+      "main": [
+        [
+          {
+            "node": "🔌 Append to Audit Ledger (Sheets)  [disabled]",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔌 Append to Audit Ledger (Sheets)  [disabled]": {
+      "main": [
+        [
+          {
+            "node": "✅ Final Output (Audit Record)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model — Extract": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "🤖 AI #1: Extract Invoice Fields",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model — Review": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "🤖 AI #2: Risk Review (for approver)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

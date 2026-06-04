@@ -1,0 +1,11 @@
+NIMBUS CLOUD SERVICES
+Invoice #: NB-3310
+Date: 2026-06-01
+Bill To: Rocketium Pvt Ltd
+Service                         Amount
+Managed Kubernetes (May)        2200.00
+Egress + storage overage         410.00
+Subtotal                        2610.00
+Tax (18%)                        469.80
+TOTAL: USD 3079.80
+Terms: Net 15
